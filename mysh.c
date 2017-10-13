@@ -12,6 +12,13 @@
 #include <fcntl.h>
 
 
+int top(char *array[512]) 
+{
+    int i;
+    for(i = 0; array[i] != '\0'; i++);
+    	return --i;
+}
+
 
 bool isBuiltIn (char *array1[512], char *array2[8]) {
 	for (int i = 0; i < 8; i++){
@@ -47,7 +54,10 @@ bool validRedirect (char *array[512]) {
 			return true;
 		}
 		for (int j = index + 1; array[j] != '\0'; j++){
-			count2++;
+			if ((strcmp (array[j], "&")) != 0) {
+				count2++;
+				
+			}
 		}
 		if (count == 1 && count2 == 1){
 			return true;
@@ -57,11 +67,25 @@ bool validRedirect (char *array[512]) {
 		}
 }
 
-int top(char *array[512]) 
-{
-    int i;
-    for(i = 0; array[i] != '\0'; i++);
-    	return --i;
+bool validBackground (char *array[512]) {
+		int count = 0;
+		int count2 = 0;
+		int index = 0;
+		for (int i = 0; array[i] != '\0'; i++){
+			if ((strcmp (array[i], "&")) == 0){
+				count++;
+				index = i;
+			}	
+		}
+		if (count == 0) {
+			return true;
+		}
+		else if ((count == 1) && (top(array) == index)){
+			return true;
+		}
+		return false;
+
+
 }
 
 
@@ -102,7 +126,7 @@ int main( ) {
             p = strtok (NULL, " \n");
         }
         strcpy(cmd, array[0]);
-	if (validRedirect(array)) {
+	if (validRedirect(array) && validBackground(array)) {
 		if (isBuiltIn(array, builtIn)) {
 			if (strcmp (array[0], "pwd") == 0) {
             			path = getcwd(cwd, sizeof(cwd));
@@ -177,8 +201,7 @@ int main( ) {
 		else {
 
 			pid = fork();
-			//&& (isRedirect(array))
-			if (pid == 0) {
+			if (pid == 0 && (isRedirect(array))) {
 				char* fileName = array[top(array)];
 				char *modArray[512];
 				for (int i = 0; (strcmp (array[i], ">") != 0); i++) {
@@ -186,21 +209,15 @@ int main( ) {
 
 				}
 				int filefd = open(fileName, O_WRONLY|O_CREAT, 0666);
-				//if (!fork()) {
-  					close(1);//Close stdout
-  					dup(filefd);
-  					//execvp(cmd, array);
-					execvp(cmd, modArray);
-				//} 
-				//else {
-  					close(filefd);
-  					wait(NULL);
-				//}
-				//printf("%zu\n", (sizeof(array)/sizeof(array[0])));
-				//execvp(cmd, array);
+  				close(1);//Close stdout
+  				dup(filefd);
+				execvp(cmd, modArray);
+  				close(filefd);
+				//wait(NULL);
 
 			}
-			wait(NULL);
+
+			//wait(NULL);
 			printf("mysh > ");
 			free(name);
 		}
