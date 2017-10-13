@@ -1,0 +1,8 @@
+total 48
+drwxrwxr-x 2 sec sec  4096 Oct 12 22:52 .
+drwxr-xr-x 9 sec sec  4096 Oct 11 22:18 ..
+-rw-rw-r-- 1 sec sec     0 Oct 12 22:52 christian.txt
+-rwxrwxr-x 1 sec sec  8600 Oct 11 23:11 file
+-rw-rw-r-- 1 sec sec    79 Oct 11 23:11 file.c
+-rwxrwxr-x 1 sec sec 14184 Oct 12 22:52 mysh
+-rw-rw-r-- 1 sec sec  5240 Oct 12 22:52 mysh.c
