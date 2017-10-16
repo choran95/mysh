@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+// Initalize variables.
 int backgroundCount = 0;
 pid_t pid;
 char *getcwd(char *buf, size_t size);
@@ -21,6 +22,7 @@ char *builtIn[] = {"pwd", "cd", "show-dirs", "show-files",
 char cmd[512];
 char cwd[512];
 
+// Throws the one true error message.
 void throwError() {
 	char error_message[30] = "An error has occured\nmysh> ";
 				write (STDERR_FILENO, error_message, strlen(error_message));
@@ -46,6 +48,7 @@ bool isBuiltIn (char *array1[512], char *array2[9]) {
 
 }
 
+// Checks if the input needs a redirection.
 bool isRedirect (char *array[512]) {
 	if (top(array) == 0) {
 		return false;
@@ -65,6 +68,7 @@ bool isRedirect (char *array[512]) {
 
 }
 
+// Checks if the input is a background process.
 bool isBackground (char *array[512]) {
 	if (strcmp (array[top(array)], "&") == 0) {
 		return true;
@@ -75,6 +79,15 @@ bool isBackground (char *array[512]) {
 
 }
 
+// Checks if the input is a python file.
+bool isPython(const char *file) {
+	if ((file[strlen(file)-2] == 'p') && (file[strlen(file)-1] == 'y')) {
+		return true;
+	}
+	return false;
+}
+
+// Checks whether or not the input has valid syntax for redirection.
 bool validRedirect (char *array[512]) {
 		int count = 0;
 		int count2 = 0;
@@ -102,6 +115,7 @@ bool validRedirect (char *array[512]) {
 		}
 }
 
+// Checks whether or not the input has valid syntax for a background process.
 bool validBackground (char *array[512]) {
 		int count = 0;
 		int count2 = 0;
@@ -133,7 +147,7 @@ char* concat(const char *s1, const char *s2) {
     return result;
 }
 
-bool batchCMD (char *cmdName) {	
+bool inputCMD (char *cmdName) {	
 	char *name;
 	char *array[512] = {NULL};
         int i = 0;
@@ -156,8 +170,8 @@ bool batchCMD (char *cmdName) {
             		p = strtok (NULL, " \n");
         	}
 	}
-        strcpy(cmd, array[0]);
-	if (validRedirect(array) && validBackground(array)) {
+	if (validRedirect(array) && validBackground(array) && (array[0] != NULL)) {
+		strcpy(cmd, array[0]);
 		if (isBuiltIn(array, builtIn)) {
 			if (strcmp (array[0], "pwd") == 0) {
             			path = getcwd(cwd, sizeof(cwd));
@@ -240,6 +254,31 @@ bool batchCMD (char *cmdName) {
             
 
         	}
+		else if (isPython(array[0])) {
+			pid = fork();
+			if (pid < 0) {
+				throwError();
+			}
+			if (pid == 0) {
+				char *modArray[512];
+				modArray[0] = "python";
+				for (int i = 0; array[i] != '\0'; i++) {
+					modArray[i+1] = array[i];
+
+				}
+				if (execvp("python", modArray) == -1){
+					throwError();
+				}
+			}
+			if (pid > 0) {
+				wait(NULL);
+				
+				if (cmdName == NULL) {
+					free(name);
+					write (STDERR_FILENO, "mysh> ", strlen("mysh> "));
+				}
+			}
+		}
 		else if (isRedirect(array) && isBackground(array)){
 			pid = fork();
 			if (pid < 0) {
@@ -357,8 +396,9 @@ bool batchCMD (char *cmdName) {
 
 int main(int argc, char *argv[]) {
     if (argc > 2) {
-	char error_message[30] = "An error has occured\nmysh> ";
+	char error_message[30] = "An error has occured\n";
 	write (STDERR_FILENO, error_message, strlen(error_message));
+	return 0;
     }
 
     if (argc == 2) {
@@ -375,21 +415,21 @@ int main(int argc, char *argv[]) {
 
     	while ((read = getline(&line, &len, fp)) != -1) {
 		write(STDOUT_FILENO, line, strlen(line));
-        	batchCMD(line);
+        	inputCMD(line);
    	}
 
     	fclose(fp);
    	if (line) {
         	free(line);
 	}
-	write(STDOUT_FILENO, "mysh> ", strlen("mysh> "));
-	while (batchCMD(NULL));
+	//write(STDOUT_FILENO, "mysh> ", strlen("mysh> "));
+	while (inputCMD(NULL));
 
 
     }
 	else {
 		write(STDOUT_FILENO, "mysh> ", strlen("mysh> "));
-		while (batchCMD(NULL));
+		while (inputCMD(NULL));
 	}
 	
     return 0;
