@@ -21,6 +21,12 @@ char *builtIn[] = {"pwd", "cd", "show-dirs", "show-files",
 char cmd[512];
 char cwd[512];
 
+void throwError() {
+	char error_message[30] = "An error has occured\nmysh> ";
+				write (STDERR_FILENO, error_message, strlen(error_message));
+
+}
+
 // Gets the last index of an array.
 int top(char *array[512]) 
 {
@@ -161,7 +167,7 @@ bool batchCMD (char *cmdName) {
 	    			if (array[1] == NULL){
 					if (chdir(getenv("HOME")) != 0){
                 				printf("Error cd\n");
-                				printf("mysh> ");
+              
             				}
             				else {
                 				chdir(getenv("HOME"));
@@ -228,7 +234,7 @@ bool batchCMD (char *cmdName) {
 			}
 
 			if (cmdName == NULL) {
-				printf("mysh> ");
+				write(STDOUT_FILENO, "mysh> ", strlen("mysh> "));
 				free(name);
 			}
             
@@ -237,9 +243,7 @@ bool batchCMD (char *cmdName) {
 		else if (isRedirect(array) && isBackground(array)){
 			pid = fork();
 			if (pid < 0) {
-				char error_message[30] = "An error has occured\n";
-				write (STDERR_FILENO, error_message, strlen(error_message));
-				printf("mysh> ");
+				throwError();
 			}
 			if (pid == 0) {
 				char* fileName = array[top(array)-1];
@@ -251,7 +255,9 @@ bool batchCMD (char *cmdName) {
 				int filefd = open(fileName, O_WRONLY|O_CREAT, 0666);
   				close(1);//Close stdout
   				dup(filefd);
-				execvp(cmd, modArray);
+				if (execvp(cmd, modArray) == -1){
+					throwError();
+				}
   				close(filefd);
 				backgroundCount++;
 
@@ -260,16 +266,14 @@ bool batchCMD (char *cmdName) {
 				//wait(NULL);
 				if (cmdName == NULL) {
 					free(name);
-					printf("mysh> ");
+					write (STDERR_FILENO, "mysh> ", strlen("mysh> "));
 				}
 			}
 		}
 		else if (isRedirect(array)){
 			pid = fork();
 			if (pid < 0) {
-				char error_message[30] = "An error has occured\n";
-				write (STDERR_FILENO, error_message, strlen(error_message));
-				printf("mysh> ");
+				throwError();
 			}
 			if (pid == 0) {
 				char* fileName = array[top(array)];
@@ -281,7 +285,9 @@ bool batchCMD (char *cmdName) {
 				int filefd = open(fileName, O_WRONLY|O_CREAT, 0666);
   				close(1);//Close stdout
   				dup(filefd);
-				execvp(cmd, modArray);
+				if (execvp(cmd, modArray) == -1){
+					throwError();
+				}
   				close(filefd);
 
 				
@@ -291,7 +297,7 @@ bool batchCMD (char *cmdName) {
 				wait(NULL);
 				if (cmdName == NULL) {
 					free(name);
-					printf("mysh> ");
+					write (STDERR_FILENO, "mysh> ", strlen("mysh> "));
 				}
 			}
 		}
@@ -299,9 +305,7 @@ bool batchCMD (char *cmdName) {
 			pid = fork();
 			backgroundCount++;
 			if (pid < 0) {
-				char error_message[30] = "An error has occured\n";
-				write (STDERR_FILENO, error_message, strlen(error_message));
-				printf("mysh> ");
+				throwError();
 			}
 			if (pid == 0) {
 				char *modArray[512];
@@ -309,7 +313,9 @@ bool batchCMD (char *cmdName) {
 					modArray[i] = array[i];
 
 				}
-				execvp(cmd, modArray);
+				if (execvp(cmd, modArray) == -1){
+					throwError();
+				}
 				
 			
 			}
@@ -317,7 +323,7 @@ bool batchCMD (char *cmdName) {
 
 				if (cmdName == NULL) {
 					free(name);
-					printf("mysh> ");
+					write (STDERR_FILENO, "mysh> ", strlen("mysh> "));
 				}
 			}
 
@@ -325,27 +331,25 @@ bool batchCMD (char *cmdName) {
 		else {
 			pid = fork();
 			if (pid < 0) {
-				char error_message[30] = "An error has occured\n";
-				write (STDERR_FILENO, error_message, strlen(error_message));
-				printf("mysh> ");
+				throwError();
 			}
 			if (pid == 0) {
-				execvp(cmd, array);
+				if (execvp(cmd, array) == -1){
+					throwError();
+				}
 			}
 			if (pid > 0) {
 				wait(NULL);
 				
 				if (cmdName == NULL) {
 					free(name);
-					printf("mysh> ");
+					write (STDERR_FILENO, "mysh> ", strlen("mysh> "));
 				}
 			}
 		}
 	}
 	else {
-		char error_message[30] = "An error has occured\n";
-		write (STDERR_FILENO, error_message, strlen(error_message));
-		printf("mysh> ");
+		throwError();
 	}
 	return true;
 
@@ -353,11 +357,9 @@ bool batchCMD (char *cmdName) {
 
 int main(int argc, char *argv[]) {
     if (argc > 2) {
-	char error_message[30] = "An error has occured\n";
+	char error_message[30] = "An error has occured\nmysh> ";
 	write (STDERR_FILENO, error_message, strlen(error_message));
     }
-
-    printf("mysh> ");
 
     if (argc == 2) {
 	FILE * fp;
@@ -372,7 +374,7 @@ int main(int argc, char *argv[]) {
 	}
 
     	while ((read = getline(&line, &len, fp)) != -1) {
-		write(STDOUT_FILENO, concat("mysh> ", line), strlen(concat("mysh> ", line)));
+		write(STDOUT_FILENO, line, strlen(line));
         	batchCMD(line);
    	}
 
@@ -380,11 +382,13 @@ int main(int argc, char *argv[]) {
    	if (line) {
         	free(line);
 	}
+	write(STDOUT_FILENO, "mysh> ", strlen("mysh> "));
 	while (batchCMD(NULL));
 
 
     }
 	else {
+		write(STDOUT_FILENO, "mysh> ", strlen("mysh> "));
 		while (batchCMD(NULL));
 	}
 	
