@@ -13,7 +13,6 @@
 
 // Initalize variables.
 struct Node *start = NULL;
-int backgroundCount = 0;
 pid_t pid;
 char *getcwd(char *buf, size_t size);
 int chdir(const char *path);
@@ -22,6 +21,66 @@ char *builtIn[] = {"pwd", "cd", "show-dirs", "show-files",
 			"mkdir", "tool", "clear", "exit", "wait", "mysh"};
 char cmd[513];
 char cwd[513];
+
+struct command
+{
+  const char **argv;
+};
+
+
+int
+spawn_proc (int in, int out, struct command *cmd)
+{
+  pid_t pid;
+
+  if ((pid = fork ()) == 0)
+    {
+      if (in != 0)
+        {
+          dup2 (in, 0);
+          close (in);
+        }
+
+      if (out != 1)
+        {
+          dup2 (out, 1);
+          close (out);
+        }
+
+      return execvp (cmd->argv [0], (char * const *)cmd->argv);
+    }
+
+  return pid;
+}
+
+
+int
+fork_pipes (int n, struct command *cmd)
+{
+  int i;
+  pid_t pid;
+  int in, fd [2];
+
+  in = 0;
+
+  for (i = 0; i < n - 1; ++i)
+    {
+      pipe (fd);
+
+      spawn_proc (in, fd [1], cmd + i);
+
+      close (fd [1]);
+
+      in = fd [0];
+    }
+
+  
+  if (in != 0)
+    dup2 (in, 0);
+
+  
+  return execvp (cmd [i].argv [0], (char * const *)cmd [i].argv);
+}
 
 // Throws the one true error message.
 void throwError() {
@@ -113,6 +172,15 @@ bool isRedirect (char *array[513]) {
 		return false;
 	}
 
+}
+
+bool isPipe (char *array[513]) {
+	for (int i = 0; array[i] != '\0'; i++){
+			if (strcmp (array[i], "|") == 0){
+				return true;
+			}	
+		}
+	return false;
 }
 
 // Checks if the input is a background process.
@@ -339,51 +407,130 @@ bool inputCMD (char *cmdName) {
 				}
 			}
 		}
-		else if (isRedirect(array) && isBackground(array)){
+		else if (isRedirect(array) && isPipe(array)) {
+			bool isBack = isBackground(array);
+			struct command pipeCmd [513];
 			pid = fork();
 			if (pid < 0) {
 				throwError();
 			}
 			if (pid == 0) {
-				char* fileName = array[top(array)-1];
-				char *modArray[513];
-				for (int i = 0; (strcmp (array[i], ">") != 0); i++) {
-					modArray[i] = array[i];
-
+				char* fileName;
+				char *modArray[513][513];
+				if (isBack) {
+					fileName = array[top(array)-1];
 				}
-				int filefd = open(fileName, O_WRONLY|O_CREAT, 0666);
+				else { 
+					fileName = array[top(array)];
+				}
+				int arrayNumber = 0;
+				int startIndex = 0;
+				for (int i = 0; (strcmp (array[i], ">") != 0); i++){
+					if (strcmp (array[i], "|") != 0) {
+						modArray[arrayNumber][startIndex] = array[i];
+						startIndex++;
+					}
+					else {
+		
+						modArray[arrayNumber][startIndex] = NULL;
+						startIndex = 0;
+						pipeCmd[arrayNumber].argv = modArray[arrayNumber];
+						arrayNumber++;
+						
+					}
+				}
+				modArray[arrayNumber][startIndex] = NULL;
+				pipeCmd[arrayNumber].argv = modArray[arrayNumber];
+				int filefd = open(fileName, O_WRONLY|O_CREAT|O_TRUNC, S_IRWXU);
   				close(1);//Close stdout
   				dup(filefd);
-				if (execvp(cmd, modArray) == -1){
+				if (isBack) {
+					push(&start, &pid, int_size);
+				}
+				if (fork_pipes (arrayNumber+1, pipeCmd) < 0) {
 					throwError();
 				}
-  				close(filefd);
-				backgroundCount++;
-
+				close(filefd);
 			}
 			if (pid > 0) {
-				//wait(NULL);
+				if (!isBack) {
+					wait(NULL);
+				}
 				if (cmdName == NULL) {
 					free(name);
 					write (STDERR_FILENO, "mysh> ", strlen("mysh> "));
 				}
 			}
 		}
-		else if (isRedirect(array)){
+		else if (isPipe(array)) {
+
+  			struct command pipeCmd [513];
+			
 			pid = fork();
 			if (pid < 0) {
 				throwError();
 			}
 			if (pid == 0) {
-				char* fileName = array[top(array)];
+				char *modArray[513][513];
+				int arrayNumber = 0;
+				int startIndex = 0;
+				for (int i = 0; array[i] != NULL; i++){
+					if (strcmp (array[i], "|") != 0) {
+						modArray[arrayNumber][startIndex] = array[i];
+						startIndex++;
+					}
+					else {
+		
+						modArray[arrayNumber][startIndex] = NULL;
+						startIndex = 0;
+						pipeCmd[arrayNumber].argv = modArray[arrayNumber];
+						arrayNumber++;
+						
+					}
+				}
+				modArray[arrayNumber][startIndex] = NULL;
+
+						pipeCmd[arrayNumber].argv = modArray[arrayNumber];
+				if (fork_pipes (arrayNumber+1, pipeCmd) == -1){
+					throwError();
+				}
+			}
+			if (pid > 0) {
+				wait(NULL);
+				if (cmdName == NULL) {
+					free(name);
+					write (STDERR_FILENO, "mysh> ", strlen("mysh> "));
+				}
+			}
+
+
+
+		}
+		else if (isRedirect(array)){
+			bool isBack = isBackground(array);
+			pid = fork();
+			if (pid < 0) {
+				throwError();
+			}
+			if (pid == 0) {
+				char* fileName;
+				if (isBack) {
+					fileName = array[top(array)-1];
+				}
+				else { 
+					fileName = array[top(array)];
+				}
 				char *modArray[513];
 				for (int i = 0; (strcmp (array[i], ">") != 0); i++) {
 					modArray[i] = array[i];
 
 				}
-				int filefd = open(fileName, O_WRONLY|O_CREAT, 0666);
+				int filefd = open(fileName, O_WRONLY|O_CREAT|O_TRUNC, S_IRWXU);
   				close(1);//Close stdout
   				dup(filefd);
+				if (isBack) {
+					push(&start, &pid, int_size);
+				}
 				if (execvp(cmd, modArray) == -1){
 					throwError();
 				}
@@ -393,7 +540,9 @@ bool inputCMD (char *cmdName) {
 
 			}
 			if (pid > 0) {
-				wait(NULL);
+				if (!isBack) {
+					wait(NULL);
+				}
 				if (cmdName == NULL) {
 					free(name);
 					write (STDERR_FILENO, "mysh> ", strlen("mysh> "));
@@ -402,7 +551,6 @@ bool inputCMD (char *cmdName) {
 		}
 		else if (isBackground(array)) {
 			pid = fork();
-			backgroundCount++;
 			if (pid < 0) {
 				throwError();
 			}
@@ -412,6 +560,7 @@ bool inputCMD (char *cmdName) {
 					modArray[i] = array[i];
 
 				}
+				push(&start, &pid, int_size);
 				if (execvp(cmd, modArray) == -1){
 					throwError();
 				}
@@ -420,7 +569,6 @@ bool inputCMD (char *cmdName) {
 			}
 			if (pid > 0) {
 				//printf("%d", pid);
-				push(&start, &pid, int_size);
 
 				if (cmdName == NULL) {
 					free(name);
@@ -435,13 +583,13 @@ bool inputCMD (char *cmdName) {
 				throwError();
 			}
 			if (pid == 0) {
+				
 				if (execvp(cmd, array) == -1){
 					throwError();
 
 				}
 			}
 			if (pid > 0) {
-				//printf("%d", pid);
 				wait(NULL);
 				
 				if (cmdName == NULL) {
