@@ -28,9 +28,7 @@ struct command
 };
 
 
-int
-spawn_proc (int in, int out, struct command *cmd)
-{
+int spawn_proc (int in, int out, struct command *cmd) {
   pid_t pid;
 
   if ((pid = fork ()) == 0)
@@ -54,9 +52,7 @@ spawn_proc (int in, int out, struct command *cmd)
 }
 
 
-int
-fork_pipes (int n, struct command *cmd)
-{
+int fork_pipes (int n, struct command *cmd) {
   int i;
   pid_t pid;
   int in, fd [2];
@@ -85,6 +81,12 @@ fork_pipes (int n, struct command *cmd)
 // Throws the one true error message.
 void throwError() {
 	char error_message[30] = "An error has occured\nmysh> ";
+				write (STDERR_FILENO, error_message, strlen(error_message));
+
+}
+
+void throwPipeError() {
+	char error_message[30] = "An error has occured\n";
 				write (STDERR_FILENO, error_message, strlen(error_message));
 
 }
@@ -390,7 +392,7 @@ bool inputCMD (char *cmdName) {
 			if (pid == 0) {
 				char *modArray[513];
 				modArray[0] = "python";
-				for (int i = 0; array[i] != '\0'; i++) {
+				for (int i = 0; array[i] != '\0' && (strcmp (array[i], "&") != 0); i++) {
 					modArray[i+1] = array[i];
 
 				}
@@ -409,6 +411,7 @@ bool inputCMD (char *cmdName) {
 		}
 		else if (isRedirect(array) && isPipe(array)) {
 			bool isBack = isBackground(array);
+			bool pipeError = false;
 			struct command pipeCmd [513];
 			pid = fork();
 			if (pid < 0) {
@@ -448,7 +451,9 @@ bool inputCMD (char *cmdName) {
 					push(&start, &pid, int_size);
 				}
 				if (fork_pipes (arrayNumber+1, pipeCmd) < 0) {
-					throwError();
+					pipeError = true;
+					throwPipeError();
+					return false;
 				}
 				close(filefd);
 			}
@@ -458,12 +463,16 @@ bool inputCMD (char *cmdName) {
 				}
 				if (cmdName == NULL) {
 					free(name);
-					write (STDERR_FILENO, "mysh> ", strlen("mysh> "));
+					if (!pipeError){
+						write (STDERR_FILENO, "mysh> ", strlen("mysh> "));
+					}
 				}
 			}
 		}
 		else if (isPipe(array)) {
 
+			bool pipeError = false;
+			bool isBack = isBackground(array);
   			struct command pipeCmd [513];
 			
 			pid = fork();
@@ -474,7 +483,7 @@ bool inputCMD (char *cmdName) {
 				char *modArray[513][513];
 				int arrayNumber = 0;
 				int startIndex = 0;
-				for (int i = 0; array[i] != NULL; i++){
+				for (int i = 0; array[i] != NULL && (strcmp (array[i], "&") != 0); i++){
 					if (strcmp (array[i], "|") != 0) {
 						modArray[arrayNumber][startIndex] = array[i];
 						startIndex++;
@@ -489,22 +498,27 @@ bool inputCMD (char *cmdName) {
 					}
 				}
 				modArray[arrayNumber][startIndex] = NULL;
-
-						pipeCmd[arrayNumber].argv = modArray[arrayNumber];
-				if (fork_pipes (arrayNumber+1, pipeCmd) == -1){
-					throwError();
+				pipeCmd[arrayNumber].argv = modArray[arrayNumber];
+				if (isBack) {
+					push(&start, &pid, int_size);
+				}
+				if (fork_pipes (arrayNumber+1, pipeCmd) < 0) {
+					pipeError = true;
+					throwPipeError();
+					return false;
 				}
 			}
 			if (pid > 0) {
-				wait(NULL);
+				if (!isBack) {
+					wait(NULL);
+				}
 				if (cmdName == NULL) {
 					free(name);
-					write (STDERR_FILENO, "mysh> ", strlen("mysh> "));
+					if (!pipeError){
+						write (STDERR_FILENO, "mysh> ", strlen("mysh> "));
+					}
 				}
 			}
-
-
-
 		}
 		else if (isRedirect(array)){
 			bool isBack = isBackground(array);
